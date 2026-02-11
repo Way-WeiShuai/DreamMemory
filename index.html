@@ -1,213 +1,347 @@
 <!DOCTYPE html>
-
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>拼图大师 - v4.3 高性能版</title>
+<title>拼图大师 v4.4 稳定优化版</title>
+
 <style>
-:root {
-    --primary-color: #4a90e2;
-    --bg-dark: #0f0f1e;
-    --card-bg: rgba(255, 255, 255, 0.05);
-    --silver-grey: #bdc3c7;
-    --gold: #f1c40f;
-    --success-green: #2ecc71;
+:root{
+--primary-color:#4a90e2;
+--bg-dark:#0f0f1e;
+--card-bg:rgba(255,255,255,.05);
 }
-body {
-    font-family: 'PingFang SC', sans-serif;
-    background-color: var(--bg-dark);
-    color: white;
-    margin: 0;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    overflow-x: hidden;
+body{
+font-family:'PingFang SC',sans-serif;
+background:var(--bg-dark);
+color:white;
+margin:0;
+min-height:100vh;
+display:flex;
+flex-direction:column;
+align-items:center;
+overflow-x:hidden;
 }
-.screen { display: none; width: 100%; max-width: 1000px; padding: 20px; box-sizing: border-box; }
-.active { display: flex; flex-direction: column; align-items: center; }
-#level-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px; width: 100%; margin-top: 20px; }
-.level-card { background: var(--card-bg); border-radius: 8px; overflow: hidden; cursor: pointer; }
-.card-thumb { width: 100%; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; background: #1a1a2e; font-size: 2.5rem; }
-.card-thumb img { width: 100%; height: 100%; object-fit: cover; }
-#board-container { padding: 10px; background: #1a1a2e; border-radius: 8px; }
-#puzzle-board { display: grid; gap: 0; position: relative; background: #000; }
-.piece { background-repeat: no-repeat; }
-.btn { padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; background: #333; color: white; }
+.screen{display:none;width:100%;max-width:1000px;padding:20px;box-sizing:border-box;}
+.active{display:flex;flex-direction:column;align-items:center;}
+#level-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:15px;width:100%;margin-top:20px;}
+.level-card{background:var(--card-bg);border-radius:8px;cursor:pointer;overflow:hidden;}
+.card-thumb{width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:#1a1a2e;}
+.card-thumb img{width:100%;height:100%;object-fit:cover;}
+#board-container{padding:10px;background:#1a1a2e;border-radius:8px;}
+#puzzle-board{display:grid;gap:0;position:relative;background:#000;}
+.piece{
+background-repeat:no-repeat;
+border:1px solid rgba(255,255,255,.15);
+touch-action:none;
+}
+.btn{padding:8px 18px;border-radius:6px;border:none;background:#333;color:white;cursor:pointer;}
 </style>
 </head>
+
 <body>
 
 <div id="menu-screen" class="screen active">
-    <h1>🧩 拼图大师 v4.3</h1>
-    <div id="level-grid"></div>
+<h1>🧩 拼图大师 v4.4</h1>
+<div id="level-grid"></div>
 </div>
 
 <div id="game-screen" class="screen">
-    <button class="btn" onclick="showMenu()">← 菜单</button>
-    <h2 id="game-title"></h2>
-    <div id="board-container">
-        <div id="puzzle-board"></div>
-    </div>
+<button class="btn" onclick="showMenu()">← 菜单</button>
+<h2 id="game-title"></h2>
+<div id="board-container">
+<div id="puzzle-board"></div>
+</div>
 </div>
 
 <script>
-/* =========================
-   图片缓存系统（核心优化）
-========================= */
+
+/* ===========================
+   图片缓存系统（生产级）
+=========================== */
+
 const imageCache = new Map();
 
-function preloadImage(url) {
-    if (imageCache.has(url)) return imageCache.get(url);
+function preloadImage(url){
+if(imageCache.has(url)) return imageCache.get(url);
 
-    const img = new Image();
-    img.src = url;
-    imageCache.set(url, img);
-    return img;
+const img = new Image();
+img.decoding="async";
+img.src=url;
+imageCache.set(url,img);
+return img;
 }
 
-/* ========================= */
+/* =========================== */
 
-let levelData = [];
-let completedLevels = JSON.parse(localStorage.getItem('puz_comp_v31') || '[]');
+let completedLevels = JSON.parse(localStorage.getItem("puz_comp_v31")||"[]");
+let levelData=[];
+let currentImgUrl="";
+let currentLevelId=1;
+let rows,cols,pWidth,pHeight;
+let pieces=[];
+let isVictoryProcessing=false;
 
-let currentImgUrl = '';
-let currentLevelId = 1;
-let rows, cols, pWidth, pHeight;
-let pieces = [];
+/* ===========================
+   关卡生成（无探测）
+=========================== */
 
-/* =========================
-   精简 discoverLevels
-========================= */
-function discoverLevels() {
-    const currentMax = completedLevels.length > 0 ? Math.max(...completedLevels) : 0;
-    const targetLimit = currentMax + 5;
-
-    levelData = [];
-    for (let i = 1; i <= targetLimit; i++) {
-        const url = `${i}.webp`;
-        levelData.push({ id: i, url });
-
-        // 提前预加载
-        preloadImage(url);
-    }
-
-    renderMenu();
+function discoverLevels(){
+const currentMax = completedLevels.length>0?Math.max(...completedLevels):0;
+const target=currentMax+5;
+levelData=[];
+for(let i=1;i<=target;i++){
+const url=`${i}.webp`;
+levelData.push({id:i,url});
+preloadImage(url);
+}
+renderMenu();
 }
 
-/* ========================= */
+/* =========================== */
 
-function renderMenu() {
-    const grid = document.getElementById('level-grid');
-    grid.innerHTML = '';
+function renderMenu(){
+const grid=document.getElementById("level-grid");
+grid.innerHTML="";
 
-    levelData.forEach(level => {
-        const isUnlocked = level.id === 1 || completedLevels.includes(level.id - 1);
-        const card = document.createElement('div');
-        card.className = 'level-card';
+levelData.forEach(level=>{
+const unlocked=level.id===1||completedLevels.includes(level.id-1);
+const card=document.createElement("div");
+card.className="level-card";
 
-        if (isUnlocked) {
-            card.innerHTML = `<div class="card-thumb"><img src="${level.url}"></div>`;
-            card.onclick = () => startLevel(level.id);
-        } else {
-            card.innerHTML = `<div class="card-thumb">🔒</div>`;
-        }
-
-        grid.appendChild(card);
-    });
+if(unlocked){
+card.innerHTML=`<div class="card-thumb"><img src="${level.url}"></div>`;
+card.onclick=()=>startLevel(level.id);
+}else{
+card.innerHTML=`<div class="card-thumb">🔒</div>`;
 }
 
-/* =========================
-   精简 startLevel + 解码优化
-========================= */
-function startLevel(levelId) {
-    currentLevelId = levelId;
-    currentImgUrl = `${levelId}.webp`;
-
-    const img = preloadImage(currentImgUrl);
-
-    img.onload = () => {
-        // 强制解码，避免绘制时卡顿
-        if (img.decode) {
-            img.decode().catch(() => {});
-        }
-
-        const ratio = img.naturalWidth / img.naturalHeight;
-        rows = cols = Math.min(8, 3 + Math.floor((levelId - 1) / 3));
-
-        const maxW = Math.min(window.innerWidth * 0.9, 700);
-        const maxH = window.innerHeight * 0.65;
-
-        pWidth = Math.floor(maxW / cols);
-        pHeight = Math.floor((maxW / ratio) / rows);
-
-        if (pHeight * rows > maxH) {
-            pHeight = Math.floor(maxH / rows);
-            pWidth = Math.floor((maxH * ratio) / cols);
-        }
-
-        initBoard();
-
-        document.getElementById('menu-screen').classList.remove('active');
-        document.getElementById('game-screen').classList.add('active');
-        document.getElementById('game-title').innerText = `Level ${levelId}`;
-
-        // 预加载下一关
-        preloadImage(`${levelId + 1}.webp`);
-    };
+grid.appendChild(card);
+});
 }
 
-/* ========================= */
+/* ===========================
+   启动关卡（稳定版）
+=========================== */
 
-function initBoard() {
-    pieces = [];
-    for (let i = 0; i < rows * cols; i++) {
-        pieces.push({
-            id: i,
-            currentPos: i,
-            bgX: (i % cols) * pWidth,
-            bgY: Math.floor(i / cols) * pHeight
-        });
-    }
+function startLevel(levelId){
 
-    let pool = [...Array(rows * cols).keys()].sort(() => Math.random() - 0.5);
-    pieces.forEach((p, i) => p.currentPos = pool[i]);
+currentLevelId=levelId;
+currentImgUrl=`${levelId}.webp`;
+const img=preloadImage(currentImgUrl);
 
-    renderPieces();
+const proceed=()=>{
+
+if(img.decode) img.decode().catch(()=>{});
+
+const ratio=img.naturalWidth/img.naturalHeight;
+let base=levelId<=15?3+Math.floor((levelId-1)/3):8;
+rows=cols=base;
+
+const maxW=Math.min(window.innerWidth*0.9,700);
+const maxH=window.innerHeight*0.65;
+
+pWidth=Math.floor(maxW/cols);
+pHeight=Math.floor((maxW/ratio)/rows);
+
+if(pHeight*rows>maxH){
+pHeight=Math.floor(maxH/rows);
+pWidth=Math.floor((maxH*ratio)/cols);
 }
 
-function renderPieces() {
-    const board = document.getElementById('puzzle-board');
-    board.innerHTML = '';
-    board.style.width = `${pWidth * cols}px`;
-    board.style.height = `${pHeight * rows}px`;
-    board.style.gridTemplateColumns = `repeat(${cols}, ${pWidth}px)`;
+initBoard();
 
-    pieces.sort((a,b) => a.currentPos - b.currentPos).forEach(p => {
-        const div = document.createElement('div');
-        div.className = 'piece';
-        div.style.width = `${pWidth}px`;
-        div.style.height = `${pHeight}px`;
+document.getElementById("menu-screen").classList.remove("active");
+document.getElementById("game-screen").classList.add("active");
+document.getElementById("game-title").innerText=`Level ${levelId}`;
 
-        // 使用缓存图片（避免重复解码）
-        div.style.backgroundImage = `url(${currentImgUrl})`;
-        div.style.backgroundPosition = `-${p.bgX}px -${p.bgY}px`;
-        div.style.backgroundSize = `${pWidth * cols}px ${pHeight * rows}px`;
+preloadImage(`${levelId+1}.webp`);
+};
 
-        board.appendChild(div);
-    });
+if(img.complete && img.naturalWidth!==0){
+proceed();
+}else{
+img.onload=proceed;
+img.onerror=()=>alert("图片加载失败："+currentImgUrl);
 }
 
-function showMenu() {
-    document.getElementById('game-screen').classList.remove('active');
-    document.getElementById('menu-screen').classList.add('active');
-    renderMenu();
 }
 
-/* ========================= */
+/* ===========================
+   拼图初始化
+=========================== */
+
+function initBoard(){
+
+pieces=[];
+for(let i=0;i<rows*cols;i++){
+pieces.push({
+id:i,
+currentPos:i,
+bgX:(i%cols)*pWidth,
+bgY:Math.floor(i/cols)*pHeight
+});
+}
+
+let pool=[...Array(rows*cols).keys()].sort(()=>Math.random()-.5);
+pieces.forEach((p,i)=>p.currentPos=pool[i]);
+
+renderPieces();
+}
+
+/* ===========================
+   渲染拼图
+=========================== */
+
+function renderPieces(){
+
+const board=document.getElementById("puzzle-board");
+board.innerHTML="";
+board.style.width=`${pWidth*cols}px`;
+board.style.height=`${pHeight*rows}px`;
+board.style.gridTemplateColumns=`repeat(${cols},${pWidth}px)`;
+
+pieces.sort((a,b)=>a.currentPos-b.currentPos).forEach(p=>{
+
+const div=document.createElement("div");
+div.className="piece";
+div.dataset.id=p.id;
+
+div.style.width=`${pWidth}px`;
+div.style.height=`${pHeight}px`;
+div.style.backgroundImage=`url(${currentImgUrl})`;
+div.style.backgroundPosition=`-${p.bgX}px -${p.bgY}px`;
+div.style.backgroundSize=`${pWidth*cols}px ${pHeight*rows}px`;
+
+div.onpointerdown=e=>handleDragStart(e,p.id);
+
+board.appendChild(div);
+
+});
+}
+
+/* ===========================
+   拖拽逻辑（v4.2完整版恢复）
+=========================== */
+
+function handleDragStart(e,id){
+
+if(isVictoryProcessing)return;
+e.preventDefault();
+
+const startX=e.clientX;
+const startY=e.clientY;
+const activeGroup=getConnectedGroup(id);
+
+window.onpointermove=ev=>{
+const dx=ev.clientX-startX;
+const dy=ev.clientY-startY;
+activeGroup.forEach(gid=>{
+const el=document.querySelector(`[data-id="${gid}"]`);
+if(el) el.style.transform=`translate(${dx}px,${dy}px)`;
+});
+};
+
+window.onpointerup=ev=>{
+window.onpointermove=null;
+window.onpointerup=null;
+
+const dx=ev.clientX-startX;
+const dy=ev.clientY-startY;
+
+let dCols=Math.round(dx/pWidth);
+let dRows=Math.round(dy/pHeight);
+
+if(dCols!==0||dRows!==0){
+
+let illegal=false;
+const plan=[];
+
+for(let gid of activeGroup){
+const p=pieces.find(x=>x.id===gid);
+const nr=Math.floor(p.currentPos/cols)+dRows;
+const nc=(p.currentPos%cols)+dCols;
+if(nr<0||nr>=rows||nc<0||nc>=cols){illegal=true;break;}
+plan.push({p,from:p.currentPos,to:nr*cols+nc});
+}
+
+if(!illegal){
+const targets=plan.map(m=>m.to);
+const originals=plan.map(m=>m.from);
+const victims=pieces.filter(x=>targets.includes(x.currentPos)&&!activeGroup.includes(x.id));
+const vacant=originals.filter(v=>!targets.includes(v));
+
+plan.forEach(m=>m.p.currentPos=m.to);
+victims.forEach((v,i)=>v.currentPos=vacant[i]);
+}
+}
+
+activeGroup.forEach(gid=>{
+const el=document.querySelector(`[data-id="${gid}"]`);
+if(el) el.style.transform="";
+});
+
+renderPieces();
+checkWin();
+};
+}
+
+/* =========================== */
+
+function getConnectedGroup(startId){
+
+const group=new Set([startId]);
+const queue=[startId];
+
+while(queue.length>0){
+const id=queue.shift();
+const p=pieces.find(x=>x.id===id);
+const r=Math.floor(p.currentPos/cols);
+const c=p.currentPos%cols;
+
+const directions=[
+{dr:0,dc:1,cond:n=>n.id===p.id+1&&Math.floor(p.id/cols)===Math.floor(n.id/cols)},
+{dr:0,dc:-1,cond:n=>n.id===p.id-1&&Math.floor(p.id/cols)===Math.floor(n.id/cols)},
+{dr:1,dc:0,cond:n=>n.id===p.id+cols},
+{dr:-1,dc:0,cond:n=>n.id===p.id-cols}
+];
+
+directions.forEach(d=>{
+const nr=r+d.dr;
+const nc=c+d.dc;
+if(nr>=0&&nr<rows&&nc>=0&&nc<cols){
+const neighbor=pieces.find(x=>x.currentPos===nr*cols+nc);
+if(neighbor&&!group.has(neighbor.id)&&d.cond(neighbor)){
+group.add(neighbor.id);
+queue.push(neighbor.id);
+}
+}
+});
+}
+
+return Array.from(group);
+}
+
+/* =========================== */
+
+function checkWin(){
+if(pieces.every(p=>p.id===p.currentPos)){
+if(!completedLevels.includes(currentLevelId)){
+completedLevels.push(currentLevelId);
+localStorage.setItem("puz_comp_v31",JSON.stringify(completedLevels));
+}
+setTimeout(()=>startLevel(currentLevelId+1),800);
+}
+}
+
+function showMenu(){
+document.getElementById("game-screen").classList.remove("active");
+document.getElementById("menu-screen").classList.add("active");
+renderMenu();
+}
 
 discoverLevels();
+
 </script>
 
 </body>
